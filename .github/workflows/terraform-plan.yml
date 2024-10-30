@@ -1,4 +1,4 @@
-name: "Terraform Plan"
+name: Terraform Plan
 
 on:
   push:
@@ -10,29 +10,33 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
-  terraform:
-    name: "Terraform Plan"
+  terraform-plan:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      
+    - name: Terraform Init
+      run: terraform init
 
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Plan
-        run: terraform plan -no-color
+    - name: Terraform Plan
+      run: terraform plan -out=tfplan
+      
+    - name: Upload Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: tfplan
+        path: tfplan
