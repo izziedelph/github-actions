@@ -2,6 +2,11 @@ name: Terraform Destroy
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type "destroy" to confirm infrastructure destruction'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -9,6 +14,7 @@ permissions:
 jobs:
   terraform-destroy:
     runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_destroy == 'destroy'
     
     steps:
     - name: Checkout code
