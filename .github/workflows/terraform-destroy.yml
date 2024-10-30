@@ -1,7 +1,7 @@
 name: "Terraform Destroy"
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
     inputs:
       confirm_destroy:
         description: 'Type "destroy" to confirm'
@@ -34,5 +34,36 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Show Terraform State
+        run: |
+          echo "Current Terraform State:"
+          terraform state list || echo "No state found"
+
+      - name: Verify AWS Resources
+        run: |
+          echo "Checking for EC2 instance..."
+          aws ec2 describe-instances --filters "Name=tag:Name,Values=github-tests" --query 'Reservations[*].Instances[*].[InstanceId,State.Name]' --output table
+
+      - name: Terraform Plan Destroy
+        run: terraform plan -destroy -no-color
+
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve
+        run: |
+          echo "Running terraform destroy..."
+          terraform destroy -auto-approve
+          if [ $? -eq 0 ]; then
+            echo "Destroy command completed successfully"
+          else
+            echo "Destroy command failed"
+            exit 1
+          fi
+
+      - name: Verify Destruction
+        run: |
+          echo "Verifying EC2 instance destruction..."
+          if aws ec2 describe-instances --filters "Name=tag:Name,Values=github-tests" --query 'Reservations[*].Instances[*].[InstanceId,State.Name]' --output text | grep -q "running"; then
+            echo "WARNING: Instance still exists!"
+            exit 1
+          else
+            echo "No running instances found with tag github-tests"
+          fi
