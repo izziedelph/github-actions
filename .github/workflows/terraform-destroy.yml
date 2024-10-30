@@ -27,24 +27,38 @@ jobs:
     - name: Terraform Init
       run: terraform init
 
+    - name: Force Remove State
+      run: |
+        rm -f terraform.tfstate*
+        rm -rf .terraform*
+        terraform init
+
     - name: Check for existing instances
       run: |
         INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=github-tests" --query "Reservations[].Instances[?State.Name=='running'].InstanceId" --output text)
         echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
-
-    - name: Terraform Destroy
-      if: env.INSTANCE_ID != ''
-      run: |
-        terraform destroy -auto-approve
-        if [ $? -ne 0 ]; then
-          echo "Terraform destroy failed, attempting direct EC2 termination..."
-          aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
+        if [ ! -z "$INSTANCE_ID" ]; then
+          echo "Found instance: $INSTANCE_ID"
         fi
 
-    - name: Verify Destruction
+    - name: Force Terminate Instance
+      if: env.INSTANCE_ID != ''
       run: |
+        echo "Terminating instance ${{ env.INSTANCE_ID }}"
+        aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
+        
+        # Wait for termination to complete
+        echo "Waiting for instance to terminate..."
+        aws ec2 wait instance-terminated --instance-ids ${{ env.INSTANCE_ID }}
+
+    - name: Final Verification
+      run: |
+        echo "Performing final verification..."
+        sleep 10  # Give AWS some time to update instance states
         REMAINING=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=github-tests" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text)
         if [ ! -z "$REMAINING" ]; then
-          echo "Warning: Instances still exist: $REMAINING"
+          echo "Error: Instances still exist: $REMAINING"
           exit 1
+        else
+          echo "All instances successfully terminated"
         fi
