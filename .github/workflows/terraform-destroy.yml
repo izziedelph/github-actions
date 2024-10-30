@@ -27,5 +27,24 @@ jobs:
     - name: Terraform Init
       run: terraform init
 
+    - name: Check for existing instances
+      run: |
+        INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=github-tests" --query "Reservations[].Instances[?State.Name=='running'].InstanceId" --output text)
+        echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
+
     - name: Terraform Destroy
-      run: terraform destroy -auto-approve
+      if: env.INSTANCE_ID != ''
+      run: |
+        terraform destroy -auto-approve
+        if [ $? -ne 0 ]; then
+          echo "Terraform destroy failed, attempting direct EC2 termination..."
+          aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
+        fi
+
+    - name: Verify Destruction
+      run: |
+        REMAINING=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=github-tests" "Name=instance-state-name,Values=running,pending" --query "Reservations[].Instances[].InstanceId" --output text)
+        if [ ! -z "$REMAINING" ]; then
+          echo "Warning: Instances still exist: $REMAINING"
+          exit 1
+        fi
